@@ -2,7 +2,7 @@
 import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  SafeAreaView, TextInput, PanResponder, Dimensions,
+  SafeAreaView, TextInput,
   KeyboardAvoidingView, Platform, useColorScheme,
   Alert, Modal,
 } from 'react-native';
@@ -14,8 +14,6 @@ import { saveLocalResult } from '../utils/storage';
 const ORANGE    = '#e85c2f';
 const NAVY      = '#1a2744';
 const NAVY_DARK = '#0d1a2e';
-const HANDLE_H  = 44;
-const { height: SCREEN_H } = Dimensions.get('window');
 
 const light = {
   bg: '#ffffff', text: NAVY, muted: '#6b7280',
@@ -75,13 +73,9 @@ interface MCOption {
 
 // ─── CompletionQuestion ───────────────────────────────────────────────────────
 // Renders the whole sentence in ONE <Text> so prefix, blank and suffix flow as
-// a single continuous line that wraps naturally (no flexWrap block-dropping).
-// The input is a real <TextInput> placed in normal text flow.
-//
-// Keyboard handling: instead of measureLayout (which crashes under Fabric/New
-// Architecture with "must be called with a ref to a native component"), each
-// question reports its own Y position via onLayout. On focus we scroll the
-// parent ScrollView to that stored Y, placing the input above the keyboard.
+// a single continuous line that wraps naturally. The input is a real <TextInput>
+// placed in normal text flow. Each question reports its Y via onLayout so we can
+// scroll it above the keyboard on focus (no measureLayout — that crashes Fabric).
 function CompletionQuestion({
   q, num, ans, next, inputRefs, setAnswer, C, scrollRef, layoutMap,
 }: any) {
@@ -89,7 +83,6 @@ function CompletionQuestion({
     <View
       style={{ marginBottom: 18 }}
       onLayout={e => {
-        // Store this question's Y offset within the ScrollView content.
         layoutMap.current[q.id] = e.nativeEvent.layout.y;
       }}
     >
@@ -105,8 +98,6 @@ function CompletionQuestion({
           value={ans}
           onChangeText={(v: string) => setAnswer(q.id, v)}
           onFocus={() => {
-            // Scroll so this input sits ~100px below the top of the visible
-            // questions area — which is above the keyboard.
             const y = layoutMap.current[q.id];
             if (y != null && scrollRef?.current) {
               setTimeout(() => {
@@ -138,7 +129,6 @@ const CQ = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     textAlign: 'center',
-    // keep the inline input compact so it sits on the text baseline
     paddingVertical: 0,
   },
 });
@@ -229,45 +219,18 @@ export default function PassageTestScreen({ route, navigation }: any) {
   const timerRef                    = useRef<ReturnType<typeof setInterval> | null>(null);
   const submittedRef                = useRef(false); // guards double-submit
 
+  // ── View toggle: passage | questions ─────────────────────────────────────────
+  const [view, setView] = useState<'passage' | 'questions'>('passage');
+
   // answersRef mirrors `answers` so evaluate() can read the latest values
   // WITHOUT being recreated on every keystroke (which would restart the timer).
   const answersRef = useRef<Record<number, string>>({});
   useEffect(() => { answersRef.current = answers; }, [answers]);
 
-  // ── Split panel ────────────────────────────────────────────────────────────
-  const cardHRef    = useRef(SCREEN_H * 0.78);
-  const cardInitRef = useRef(false);
-  const INITIAL_TOP_H = SCREEN_H * 0.3;
-  const topHRef     = useRef(INITIAL_TOP_H);
-  const startTopH   = useRef(topHRef.current);
-  const [topH, setTopH] = useState(INITIAL_TOP_H);
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder:        () => false,
-      onStartShouldSetPanResponderCapture: () => false,
-      onMoveShouldSetPanResponder:         () => true,
-      onMoveShouldSetPanResponderCapture:  () => true,
-      onPanResponderGrant: () => {
-        startTopH.current = topHRef.current;
-      },
-      onPanResponderMove: (_, g) => {
-        const next    = startTopH.current + g.dy;
-        const min     = 0;
-        const max     = cardHRef.current - HANDLE_H;
-        const clamped = Math.max(min, Math.min(max, next));
-        topHRef.current = clamped;
-        setTopH(clamped);
-      },
-      onPanResponderRelease:   () => {},
-      onPanResponderTerminate: () => {},
-    })
-  ).current;
-
   const questionsScrollRef = useRef<ScrollView>(null);
   const inputRefs = useRef<Record<number, TextInput | null>>({});
-  // Stores each completion question's Y offset within the questions ScrollView,
-  // reported via onLayout. Used to scroll the input above the keyboard on focus.
+  // Each completion question's Y offset within the questions ScrollView, reported
+  // via onLayout. Used to scroll the input above the keyboard on focus.
   const layoutMap = useRef<Record<number, number>>({});
 
   const completionQs = useMemo(() =>
@@ -297,7 +260,6 @@ export default function PassageTestScreen({ route, navigation }: any) {
   );
 
   // evaluate reads answersRef (not answers) so it stays stable across keystrokes.
-  // Depends only on realQs + identifiers — NOT on `answers`.
   const evaluate = useCallback(async () => {
     if (submittedRef.current) return; // prevent double submit (timer + button)
     submittedRef.current = true;
@@ -856,9 +818,10 @@ export default function PassageTestScreen({ route, navigation }: any) {
   };
 
   // ═══════════════════════════════════════════════════════════════════════════
-  //  TEST RENDER
+  //  TEST RENDER — two full-screen views toggled by a floating segmented pill
   // ═══════════════════════════════════════════════════════════════════════════
   const timerColor = timeLeft < 300 ? '#ef4444' : timeLeft < 600 ? '#f59e0b' : ORANGE;
+  const showingPassage = view === 'passage';
 
   return (
     <SafeAreaView style={[S.safe, { backgroundColor: NAVY_DARK }]}>
@@ -883,74 +846,94 @@ export default function PassageTestScreen({ route, navigation }: any) {
         </TouchableOpacity>
       </View>
 
-      <View style={[S.card, { backgroundColor: C.bg }]}
-        onLayout={e => {
-          const h = e.nativeEvent.layout.height;
-          cardHRef.current = h;
-          if (!cardInitRef.current) {
-            cardInitRef.current = true;
-            const initH = h * 0.5;
-            topHRef.current = initH;
-            setTopH(initH);
-          }
-        }}>
+      <View style={[S.card, { backgroundColor: C.bg }]}>
 
-        <ScrollView
-          style={{ height: topH }}
-          contentContainerStyle={{ padding: 20, paddingBottom: 10 }}
-          showsVerticalScrollIndicator={false}
-        >
-          {loading ? (
-            <Text style={{ color: C.muted, fontSize: 14 }}>Loading passage…</Text>
-          ) : (
-            paragraphs.map((p, pi) => (
-              <Text key={pi} style={[S.passageText, { color: C.text }]}>{p}</Text>
-            ))
-          )}
-        </ScrollView>
-
-        <View {...panResponder.panHandlers}
-          style={[S.handle, { backgroundColor: isDark ? '#1e3050' : '#f0f0f2' }]}>
-          <View style={S.handleBar} />
-          <Feather name="chevron-down" size={16} color={C.muted} />
-        </View>
-
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        {/* ── PASSAGE VIEW (stays mounted; hidden when on questions so scroll
+               position is preserved) ──────────────────────────────────────── */}
+        <View
+          style={[S.fill, !showingPassage && S.hidden]}
+          pointerEvents={showingPassage ? 'auto' : 'none'}
         >
           <ScrollView
-            ref={questionsScrollRef}
-            style={{ flex: 1 }}
-            contentContainerStyle={{ padding: 16, paddingBottom: 60 }}
+            contentContainerStyle={{ padding: 20, paddingBottom: 90 }}
             showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="interactive"
-            automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
           >
             {loading ? (
-              <Text style={{ color: C.muted, fontSize: 14, textAlign: 'center', marginTop: 20 }}>
-                Loading questions…
-              </Text>
-            ) : groups.length === 0 ? (
-              <Text style={{ color: C.muted, fontSize: 14, textAlign: 'center', marginTop: 20 }}>
-                No question groups found for this test.
-              </Text>
+              <Text style={{ color: C.muted, fontSize: 14 }}>Loading passage…</Text>
             ) : (
-              groups.map((g, gi) => renderGroup(g, gi))
+              paragraphs.map((p, pi) => (
+                <Text key={pi} style={[S.passageText, { color: C.text }]}>{p}</Text>
+              ))
             )}
           </ScrollView>
+        </View>
 
-          <View style={[S.submitBar, { borderTopColor: C.border, backgroundColor: C.bg }]}>
-            <Text style={[S.submitCount, { color: C.muted }]}>
-              {answered}/{realQs.length} answered
-            </Text>
-            <TouchableOpacity style={S.submitBtn} onPress={() => doSubmit(false)} activeOpacity={0.85}>
-              <Text style={S.submitBtnText}>Submit</Text>
-              <Feather name="check" size={15} color="#fff" />
+        {/* ── QUESTIONS VIEW (stays mounted; hidden when on passage so answers
+               and scroll position persist) ────────────────────────────────── */}
+        <View
+          style={[S.fill, showingPassage && S.hidden]}
+          pointerEvents={showingPassage ? 'none' : 'auto'}
+        >
+          <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          >
+            <ScrollView
+              ref={questionsScrollRef}
+              style={{ flex: 1 }}
+              contentContainerStyle={{ padding: 16, paddingBottom: 180 }}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="interactive"
+              automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+            >
+              {loading ? (
+                <Text style={{ color: C.muted, fontSize: 14, textAlign: 'center', marginTop: 20 }}>
+                  Loading questions…
+                </Text>
+              ) : groups.length === 0 ? (
+                <Text style={{ color: C.muted, fontSize: 14, textAlign: 'center', marginTop: 20 }}>
+                  No question groups found for this test.
+                </Text>
+              ) : (
+                groups.map((g, gi) => renderGroup(g, gi))
+              )}
+            </ScrollView>
+
+            <View style={[S.submitBar, { borderTopColor: C.border, backgroundColor: C.bg }]}>
+              <Text style={[S.submitCount, { color: C.muted }]}>
+                {answered}/{realQs.length} answered
+              </Text>
+              <TouchableOpacity style={S.submitBtn} onPress={() => doSubmit(false)} activeOpacity={0.85}>
+                <Text style={S.submitBtnText}>Submit</Text>
+                <Feather name="check" size={15} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+
+        {/* ── Floating segmented toggle: [ Passage | Questions ] ───────────────
+               box-none so taps pass through the wrapper but hit the buttons. */}
+        <View style={S.toggleWrap} pointerEvents="box-none">
+          <View style={[S.toggle, { backgroundColor: isDark ? '#0d1a2e' : '#ffffff', borderColor: C.border }]}>
+            <TouchableOpacity
+              style={[S.toggleSeg, showingPassage && S.toggleSegActive]}
+              onPress={() => setView('passage')}
+              activeOpacity={0.85}
+            >
+              <Feather name="book-open" size={15} color={showingPassage ? '#fff' : C.muted} />
+              <Text style={[S.toggleTxt, { color: showingPassage ? '#fff' : C.muted }]}>Passage</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[S.toggleSeg, !showingPassage && S.toggleSegActive]}
+              onPress={() => setView('questions')}
+              activeOpacity={0.85}
+            >
+              <Feather name="edit-3" size={15} color={!showingPassage ? '#fff' : C.muted} />
+              <Text style={[S.toggleTxt, { color: !showingPassage ? '#fff' : C.muted }]}>Questions</Text>
             </TouchableOpacity>
           </View>
-        </KeyboardAvoidingView>
+        </View>
       </View>
 
       <SettingsModal
@@ -974,8 +957,19 @@ const S = StyleSheet.create({
   iconBtn:     { width: 40, height: 40, borderRadius: 20, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
 
   card:        { flex: 1, borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: 'hidden' },
-  handle:      { height: HANDLE_H, alignItems: 'center', justifyContent: 'center', gap: 4 },
-  handleBar:   { width: 36, height: 3, borderRadius: 2, backgroundColor: '#cbd5e1' },
+
+  // View container fill + hide. Keeping both views mounted (just hidden)
+  // preserves scroll position AND typed answers when switching.
+  fill:        { ...StyleSheet.absoluteFillObject },
+  hidden:      { opacity: 0, zIndex: -1 },
+
+  // Floating segmented toggle
+  toggleWrap:  { position: 'absolute', left: 0, right: 0, bottom: 14, alignItems: 'center' },
+  toggle:      { flexDirection: 'row', borderRadius: 26, borderWidth: 1, padding: 4, gap: 4,
+                 shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 6 },
+  toggleSeg:   { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 22, paddingVertical: 11, borderRadius: 22 },
+  toggleSegActive: { backgroundColor: ORANGE },
+  toggleTxt:   { fontSize: 14, fontWeight: '800' },
 
   passageText: { fontSize: 16, lineHeight: 26, marginBottom: 10, fontWeight: '400' },
 
@@ -1008,7 +1002,7 @@ const S = StyleSheet.create({
   grpIcon:     { width: 38, height: 38, borderRadius: 11, backgroundColor: ORANGE, alignItems: 'center', justifyContent: 'center' },
   grpLabel:    { fontSize: 20, fontWeight: '900' },
 
-  submitBar:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12, borderTopWidth: 1 },
+  submitBar:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 80, borderTopWidth: 1 },
   submitCount:   { fontSize: 13, fontWeight: '600' },
   submitBtn:     { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: ORANGE, borderRadius: 22, paddingHorizontal: 22, paddingVertical: 10 },
   submitBtnText: { color: '#fff', fontWeight: '800', fontSize: 14 },

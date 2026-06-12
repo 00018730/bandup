@@ -1,41 +1,55 @@
-# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
-
-# dependencies
+# ─── Dependencies ────────────────────────────────────────────────────────────
 node_modules/
+.pnp
+.pnp.js
 
-# Expo
+# ─── Expo ────────────────────────────────────────────────────────────────────
 .expo/
+.expo-shared/
 dist/
 web-build/
 expo-env.d.ts
 
-# Native
-.kotlin/
+# ─── Native builds ───────────────────────────────────────────────────────────
 *.orig.*
 *.jks
 *.p8
 *.p12
 *.key
 *.mobileprovision
+ios/
+android/
+# (keep ios/ and android/ ignored if you're using Expo managed workflow / EAS.
+#  If you've run `expo prebuild` and committed native folders intentionally,
+#  remove these two lines.)
 
-# Metro
+# ─── Metro ───────────────────────────────────────────────────────────────────
 .metro-health-check*
+.haste_cache/
 
-# debug
+# ─── Secrets / env ───────────────────────────────────────────────────────────
+.env
+.env.local
+.env*.local
+*.pem
+
+# ─── Supabase local ──────────────────────────────────────────────────────────
+supabase/.temp/
+supabase/.branches/
+
+# ─── Logs ────────────────────────────────────────────────────────────────────
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+*.log
 
-# macOS
+# ─── OS / editor ─────────────────────────────────────────────────────────────
 .DS_Store
 *.pem
+.vscode/*
+!.vscode/settings.json
+.idea/
 
-# local env files
-.env*.local
-
-# typescript
+# ─── Misc ────────────────────────────────────────────────────────────────────
 *.tsbuildinfo
-
-# generated native folders
-/ios
-/android
+coverage/

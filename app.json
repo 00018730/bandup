@@ -1,30 +1,59 @@
 {
   "expo": {
-    "name": "MockMasterApp",
+    "name": "BandUp",
     "slug": "MockMasterApp",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
+    "scheme": "bandup",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#0d1a2e"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.mockmaster.bandup",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "BandUp needs access to your photos so you can set a profile picture.",
+        "NSCameraUsageDescription": "BandUp uses the camera so you can take a profile picture.",
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "usesAppleSignIn": true
     },
     "android": {
+      "package": "com.mockmaster.bandup",
+      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#0d1a2e"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "b27a191e-9bf0-4724-8d95-e3f326b384ee"
+      }
+    },
+    "plugins": [
+      "expo-apple-authentication",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.YOUR_IOS_CLIENT_ID"
+        }
+      ]
+    ]
   }
 }

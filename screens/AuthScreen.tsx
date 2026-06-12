@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   SafeAreaView, useColorScheme, ScrollView, KeyboardAvoidingView,
@@ -9,6 +9,8 @@ import { signIn, signUp } from '../utils/auth';
 import { syncLocalProgressToSupabase } from '../utils/sync';
 import { supabase } from '../supabase';
 import { loginWithUsername } from '../utils/credentials';
+import { signInWithApple, isAppleAuthAvailable } from '../utils/appleAuth';
+// import { signInWithGoogle } from '../utils/googleAuth';
 
 const ORANGE   = '#e85c2f';
 const NAVY      = '#1a2744';
@@ -62,6 +64,31 @@ export default function AuthScreen({ navigation }: any) {
   const [loading, setLoading] = useState(false);
   const isLogin = tab === 'login';
 
+  const [appleAvailable, setAppleAvailable] = useState(false);
+  useEffect(() => { isAppleAuthAvailable().then(setAppleAvailable); }, []);
+
+  const routeAfterAuth = async (userId: string, isNewUser: boolean) => {
+    if (isNewUser) { navigation.replace('ProfileSetup'); return; }
+    const { data: profile } = await supabase.from('profiles').select('id').eq('id', userId).maybeSingle();
+    navigation.replace(profile ? 'MainTabs' : 'ProfileSetup');
+  };
+
+  const handleAppleLogin = async () => {
+    const res = await signInWithApple();
+    if (res.canceled) return;
+    if (!res.success) { Alert.alert('Apple sign-in failed', res.error ?? 'Please try again.'); return; }
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) await routeAfterAuth(user.id, res.isNewUser);
+  };
+
+  //const handleGoogleLogin = async () => {
+    //const res = await signInWithGoogle();
+    //if (res.canceled) return;
+    //if (!res.success) { Alert.alert('Google sign-in failed', res.error ?? 'Please try again.'); return; }
+    //const { data: { user } } = await supabase.auth.getUser();
+    //if (user) await routeAfterAuth(user.id, res.isNewUser);
+  //};
+
   const handleSubmit = async () => {
     if (!email.trim() || !password.trim()) {
       Alert.alert('Missing fields', isLogin
@@ -111,10 +138,6 @@ export default function AuthScreen({ navigation }: any) {
     } catch (e: any) {
       Alert.alert('Error', e?.message ?? 'Could not send reset email. Please try again.');
     }
-  };
-
-  const handleSocialLogin = (provider: 'Google' | 'Apple') => {
-    Alert.alert('Coming soon', `${provider} sign-in will be available in an upcoming update.`);
   };
 
   return (
@@ -214,20 +237,23 @@ export default function AuthScreen({ navigation }: any) {
           <View style={styles.socialRow}>
             <TouchableOpacity
               style={[styles.socialBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
-              onPress={() => handleSocialLogin('Google')}
+              //onPress={handleGoogleLogin}
               activeOpacity={0.75}
             >
               <AntDesign name={'google' as any} size={16} color={isDark ? '#fff' : '#000'} />
               <Text style={[styles.socialLabel, { color: colors.text }]}>Google</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.socialBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
-              onPress={() => handleSocialLogin('Apple')}
-              activeOpacity={0.75}
-            >
-              <FontAwesome name={'apple' as any} size={16} color={isDark ? '#fff' : '#000'} />
-              <Text style={[styles.socialLabel, { color: colors.text }]}>Apple</Text>
-            </TouchableOpacity>
+            {/* Apple sign-in is iOS-only (Apple requirement + native module). */}
+            {Platform.OS === 'ios' && appleAvailable && (
+              <TouchableOpacity
+                style={[styles.socialBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                onPress={handleAppleLogin}
+                activeOpacity={0.75}
+              >
+                <FontAwesome name={'apple' as any} size={16} color={isDark ? '#fff' : '#000'} />
+                <Text style={[styles.socialLabel, { color: colors.text }]}>Apple</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           {/* Switch tab */}

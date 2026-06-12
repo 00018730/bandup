@@ -76,3 +76,32 @@ export async function loginWithUsername(username: string, password: string): Pro
     return { success: false, error: e?.message ?? 'Network error' };
   }
 }
+
+
+// ── Permanently delete the current user's account ────────────────────────────
+export async function deleteAccount(): Promise<{ success: boolean; error?: string }> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return { success: false, error: 'You must be signed in.' };
+
+  try {
+    const res = await fetch(`${FUNCTIONS_URL}/delete-account`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({}),
+    });
+    const raw = await res.text();
+    const body = raw ? JSON.parse(raw) : null;
+    if (!res.ok || !body?.success) {
+      return { success: false, error: body?.error ?? `Failed (HTTP ${res.status})` };
+    }
+    // Clear the local session after deletion.
+    await supabase.auth.signOut();
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e?.message ?? 'Network error' };
+  }
+}

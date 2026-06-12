@@ -8,6 +8,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Feather } from '@expo/vector-icons';
 import { supabase } from '../supabase';
 import { fetchUserStats } from '../utils/sync';
+import { deleteAccount } from '../utils/credentials';
 
 const ORANGE    = '#e85c2f';
 const NAVY      = '#1a2744';
@@ -171,6 +172,40 @@ export default function ProfileScreen({ navigation }: any) {
     } catch (e: any) {
       Alert.alert('Error', e?.message ?? 'Could not update photo.');
     }
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete account',
+      'This permanently deletes your account, profile, and all your progress. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete', style: 'destructive',
+          onPress: () => {
+            // Second confirmation — destructive + irreversible.
+            Alert.alert(
+              'Are you absolutely sure?',
+              'There is no way to recover your account or data after this.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Delete forever', style: 'destructive',
+                  onPress: async () => {
+                    const res = await deleteAccount();
+                    if (!res.success) {
+                      Alert.alert('Could not delete', res.error ?? 'Please try again.');
+                      return;
+                    }
+                    navigation.navigate('Auth');
+                  },
+                },
+              ]
+            );
+          },
+        },
+      ]
+    );
   };
 
   const handleSignOut = () => {
@@ -352,6 +387,12 @@ export default function ProfileScreen({ navigation }: any) {
           <Text style={styles.signOutText}>Sign Out</Text>
         </TouchableOpacity>
 
+        {/* Delete account (required by App Store) */}
+        <TouchableOpacity style={styles.deleteRow} onPress={handleDeleteAccount} activeOpacity={0.7}>
+          <Feather name="trash-2" size={15} color="#ef4444" />
+          <Text style={styles.deleteText}>Delete Account</Text>
+        </TouchableOpacity>
+
         <View style={{ height: 12 }} />
       </ScrollView>
 
@@ -419,6 +460,8 @@ const styles = StyleSheet.create({
   // Sign out
   signOut:     { flexDirection:'row', alignItems:'center', justifyContent:'center', gap:10, borderRadius:18, paddingVertical:16 },
   signOutText: { color:ORANGE, fontSize:15, fontWeight:'800' },
+  deleteRow:   { flexDirection:'row', alignItems:'center', justifyContent:'center', gap:8, paddingVertical:14, marginTop:4 },
+  deleteText:  { color:'#ef4444', fontSize:13.5, fontWeight:'700' },
 
   // Guest
   guestIcon:    { width:84, height:84, borderRadius:42, alignItems:'center', justifyContent:'center', marginBottom:18 },
